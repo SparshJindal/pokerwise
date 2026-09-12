@@ -1,0 +1,12 @@
+{
+  "name": "PokerWise",
+  "short_name": "PokerWise",
+  "description": "Poker buy-ins, cash-outs and monthly settle-ups in rupees.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FBF7F1",
+  "theme_color": "#2F6B52",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
