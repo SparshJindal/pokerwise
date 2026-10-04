@@ -2,8 +2,9 @@
 
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { BrandBar } from "@/components/Logo"
-import { balances, rupees, sessionTotals, settlements, tableNets } from "@/lib/settle"
-import type { Game } from "@/lib/types"
+import { AuthModal } from "@/components/AuthModal"
+import { balances, hasLiveUncounted, rupees, sessionTotals, settlements, tableNets } from "@/lib/settle"
+import type { Game, UserProfile } from "@/lib/types"
 
 type Tab = "night" | "tab"
 
@@ -17,6 +18,10 @@ export default function GamePage({
 
 	const [game, setGame] = useState<Game | null>(null)
 	const [meId, setMeId] = useState<string | null>(null)
+	const [user, setUser] = useState<UserProfile | null>(null)
+	const [showAuthModal, setShowAuthModal] = useState(false)
+	const [friends, setFriends] = useState<UserProfile[]>([])
+
 	const [tab, setTab] = useState<Tab>("night")
 	const [error, setError] = useState("")
 	const [loading, setLoading] = useState(true)
@@ -52,7 +57,26 @@ export default function GamePage({
 
 	useEffect(() => {
 		mounted.current = true
-		setMeId(localStorage.getItem(`pokerwise:me:${code}`))
+		const storedMe = localStorage.getItem(`pokerwise:me:${code}`)
+		if (storedMe) setMeId(storedMe)
+
+		// Fetch logged in profile and friends
+		fetch("/api/auth")
+			.then((res) => res.json())
+			.then((data) => {
+				if (data.user) {
+					setUser(data.user)
+					setJoinName(data.user.name)
+					fetch("/api/friends")
+						.then((r) => r.json())
+						.then((fData) => {
+							if (Array.isArray(fData.friends)) setFriends(fData.friends)
+						})
+						.catch(() => {})
+				}
+			})
+			.catch(() => {})
+
 		void load()
 		const timer = setInterval(load, 6000)
 		return () => {
@@ -60,6 +84,17 @@ export default function GamePage({
 			clearInterval(timer)
 		}
 	}, [code, load])
+
+	useEffect(() => {
+		if (!game || !user || meId) return
+		const found = game.players.find(
+			(p) => (p.userId && p.userId === user.id) || p.name.toLowerCase() === user.name.toLowerCase()
+		)
+		if (found) {
+			setMeId(found.id)
+			localStorage.setItem(`pokerwise:me:${code}`, found.id)
+		}
+	}, [game, user, meId, code])
 
 	useEffect(() => {
 		if (!game) return
@@ -101,6 +136,42 @@ export default function GamePage({
 		() => (game && live ? sessionTotals(game, live.id) : { pot: 0, counted: 0, drift: 0 }),
 		[game, live],
 	)
+	const isTabPending = useMemo(() => (game ? hasLiveUncounted(game) : false), [game])
+
+	const unseatedFriends = useMemo(() => {
+		if (!friends || friends.length === 0 || !game) return []
+		return friends.filter(
+			(f) =>
+				!game.players.some(
+					(p) =>
+						(p.userId && p.userId === f.id) ||
+						p.name.toLowerCase() === f.name.toLowerCase()
+				)
+		)
+	}, [friends, game])
+
+	async function quickSeatFriend(f: UserProfile) {
+		await act({
+			action: "quickSeatPlayer",
+			name: f.name,
+			userId: f.id,
+			buyIn: 500,
+		})
+	}
+
+	async function addFriendFromTable(name: string, friendUserId?: string) {
+		try {
+			const res = await fetch("/api/friends", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ friendName: name, friendUserId }),
+			})
+			const data = await res.json()
+			if (Array.isArray(data.friends)) {
+				setFriends(data.friends)
+			}
+		} catch {}
+	}
 
 	if (loading) {
 		return (
@@ -136,7 +207,21 @@ export default function GamePage({
 
 	return (
 		<main className="wrap">
-			<BrandBar tagline={game.name} />
+			<BrandBar
+				tagline={game.name}
+				user={user}
+				onOpenAuth={() => setShowAuthModal(true)}
+			/>
+
+			<AuthModal
+				isOpen={showAuthModal}
+				onClose={() => setShowAuthModal(false)}
+				initialName={user?.name || ""}
+				onSuccess={(u) => {
+					setUser(u)
+					setJoinName(u.name)
+				}}
+			/>
 
 			<section className="card codecard">
 				<div>
@@ -184,14 +269,19 @@ export default function GamePage({
 					{!me ? (
 						<section className="card">
 							<h2>Sit down</h2>
-							<p className="sub">Your name and your first buy-in.</p>
+							<p className="sub">
+								{user
+									? `Join as ${user.name}, or change your name below.`
+									: "Your name and your first buy-in."}
+							</p>
 							<form
 								onSubmit={async (e) => {
 									e.preventDefault()
 									const res = await act({
 										action: "join",
-										name: joinName,
+										name: joinName || user?.name || "Player",
 										buyIn: Number(joinBuyIn || 0),
+										userId: user?.id,
 									})
 									if (res?.playerId) {
 										localStorage.setItem(`pokerwise:me:${code}`, res.playerId)
@@ -237,6 +327,43 @@ export default function GamePage({
 								: ""}
 						</p>
 
+						{/* Quick-seat crew members */}
+						{unseatedFriends.length > 0 ? (
+							<div
+								style={{
+									marginBottom: 16,
+									padding: "10px 12px",
+									background: "var(--cream)",
+									borderRadius: "var(--radius)",
+									border: "1px solid var(--line)",
+								}}
+							>
+								<label
+									style={{
+										fontSize: 13,
+										fontWeight: 600,
+										color: "var(--ink-soft)",
+										display: "block",
+										marginBottom: 6,
+									}}
+								>
+									Quick-seat your poker crew:
+								</label>
+								<div className="chips-row">
+									{unseatedFriends.map((f) => (
+										<button
+											key={f.id}
+											type="button"
+											className="chip-btn"
+											onClick={() => quickSeatFriend(f)}
+										>
+											+ Seat {f.name} (₹500)
+										</button>
+									))}
+								</div>
+							</div>
+						) : null}
+
 						{game.players.length === 0 ? (
 							<div className="empty">
 								<span className="big">♣</span>
@@ -249,6 +376,13 @@ export default function GamePage({
 							const spent = entry?.buyIns.reduce((a, b) => a + b.amount, 0) ?? 0
 							const cashOut = entry?.cashOut ?? null
 							const net = cashOut === null ? null : cashOut - spent
+							const isAlreadyFriend =
+								friends.some(
+									(f) =>
+										(p.userId && f.id === p.userId) ||
+										f.name.toLowerCase() === p.name.toLowerCase()
+								) || (user && user.name.toLowerCase() === p.name.toLowerCase())
+
 							return (
 								<div
 									key={p.id}
@@ -260,6 +394,16 @@ export default function GamePage({
 										</div>
 										<div className="pname">{p.name}</div>
 										{p.id === meId ? <span className="chip">You</span> : null}
+										{user && p.id !== meId && !isAlreadyFriend ? (
+											<button
+												type="button"
+												className="add-friend-btn"
+												onClick={() => addFriendFromTable(p.name, p.userId)}
+												title="Add to your Poker Crew"
+											>
+												+ Add to crew
+											</button>
+										) : null}
 									</div>
 
 									<div className="meta">
@@ -313,6 +457,23 @@ export default function GamePage({
 												+ Add
 											</button>
 										</div>
+									</div>
+
+									{/* Quick-add chips */}
+									<div className="chips-row" style={{ marginTop: 2, marginBottom: 10 }}>
+										{[500, 1000, 2000, 5000].map((amt) => (
+											<button
+												key={amt}
+												type="button"
+												className="chip-btn"
+												onClick={async () => {
+													await act({ action: "addBuyIn", playerId: p.id, amount: amt })
+												}}
+												title={`Quick add ₹${amt}`}
+											>
+												+₹{amt.toLocaleString("en-IN")}
+											</button>
+										))}
 									</div>
 
 									<div className="actions">
@@ -394,6 +555,19 @@ export default function GamePage({
 						<p className="sub">
 							Fewest possible transfers across every session on this table.
 						</p>
+						{isTabPending ? (
+							<div
+								className="note"
+								style={{
+									background: "var(--gold-soft)",
+									borderColor: "var(--gold)",
+									color: "#7a540b",
+									marginBottom: 14,
+								}}
+							>
+								Tonight’s game is currently live. Once final stacks are saved under “Tonight”, the tab settles automatically.
+							</div>
+						) : null}
 						{owes.length === 0 ? (
 							<div className="empty">
 								<span className="big">♥</span>

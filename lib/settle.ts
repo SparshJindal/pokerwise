@@ -76,3 +76,9 @@ export function settlements(game: Game): Transfer[] {
 	}
 	return out
 }
+
+export function hasLiveUncounted(game: Game): boolean {
+	const live = game.sessions.find((s) => s.status === "live")
+	if (!live) return false
+	return live.entries.some((e) => e.cashOut === null)
+}

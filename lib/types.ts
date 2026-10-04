@@ -4,10 +4,27 @@ export type BuyIn = {
 	at: string
 }
 
+export type UserProfile = {
+	id: string
+	name: string
+	pin?: string
+	avatarColor?: string
+	friends: string[] // List of user IDs
+	createdAt: string
+}
+
+export type FriendSummary = {
+	id: string
+	name: string
+	tablesCount: number
+	lifetimeNet: number
+}
+
 export type Player = {
 	id: string
 	name: string
 	joinedAt: string
+	userId?: string
 }
 
 export type SessionEntry = {

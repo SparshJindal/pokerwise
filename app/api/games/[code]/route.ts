@@ -59,15 +59,45 @@ export async function POST(req: Request, ctx: Ctx) {
 		case "join": {
 			const name = String(body.name ?? "").trim().slice(0, 24)
 			const amount = money(body.buyIn)
+			const userId = body.userId ? String(body.userId) : undefined
 			if (!name) return bad("Add your name first.")
 			if (amount === null) return bad("Enter a valid buy-in amount.")
-			if (game.players.some((p) => p.name.toLowerCase() === name.toLowerCase()))
-				return bad("Someone at this table already uses that name.")
-			const player = { id: id(), name, joinedAt: new Date().toISOString() }
+
+			// Check if player is already registered by userId or name
+			let player = userId ? game.players.find((p) => p.userId === userId) : null
+			if (!player) {
+				player = game.players.find((p) => p.name.toLowerCase() === name.toLowerCase())
+			}
+
+			if (!player) {
+				player = { id: id(), name, joinedAt: new Date().toISOString(), userId }
+				game.players.push(player)
+			} else {
+				if (userId && !player.userId) player.userId = userId
+			}
+
+			const entry = entryFor(game, player.id)
+			if (amount > 0 && entry.buyIns.length === 0) {
+				entry.buyIns.push({ id: id(), amount, at: new Date().toISOString() })
+			}
+			await putGame(game)
+			return NextResponse.json({ game, playerId: player.id })
+		}
+
+		case "quickSeatPlayer": {
+			const name = String(body.name ?? "").trim().slice(0, 24)
+			const amount = money(body.buyIn ?? 500)
+			const userId = body.userId ? String(body.userId) : undefined
+			if (!name) return bad("Player name is required.")
+			if (game.players.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
+				return bad(`${name} is already at the table.`)
+			}
+			const player = { id: id(), name, joinedAt: new Date().toISOString(), userId }
 			game.players.push(player)
 			const entry = entryFor(game, player.id)
-			if (amount > 0)
+			if (amount !== null && amount > 0) {
 				entry.buyIns.push({ id: id(), amount, at: new Date().toISOString() })
+			}
 			await putGame(game)
 			return NextResponse.json({ game, playerId: player.id })
 		}

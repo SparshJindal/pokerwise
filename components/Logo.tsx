@@ -1,3 +1,8 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import type { UserProfile } from "@/lib/types"
+
 export function Logo({ size = 38 }: { size?: number }) {
 	return (
 		<svg
@@ -38,16 +43,81 @@ export function Logo({ size = 38 }: { size?: number }) {
 	)
 }
 
-export function BrandBar({ tagline = "Poker ledger · settle later" }) {
+export function BrandBar({
+	tagline = "Poker ledger · settle later",
+	user,
+	onOpenAuth,
+	showDbStatus = true,
+}: {
+	tagline?: string
+	user?: UserProfile | null
+	onOpenAuth?: () => void
+	showDbStatus?: boolean
+}) {
+	const [dbHealth, setDbHealth] = useState<{
+		usingRedis: boolean
+		connected: boolean
+		message: string
+	} | null>(null)
+
+	useEffect(() => {
+		if (!showDbStatus) return
+		fetch("/api/health")
+			.then((res) => res.json())
+			.then((data) => setDbHealth(data))
+			.catch(() =>
+				setDbHealth({
+					usingRedis: false,
+					connected: false,
+					message: "Database status unavailable",
+				})
+			)
+	}, [showDbStatus])
+
 	return (
-		<div className="brandbar">
-			<Logo />
-			<div>
-				<h1>
-					Poker<em style={{ fontStyle: "italic", color: "#2F6B52" }}>Wise</em>
-				</h1>
-				<span>{tagline}</span>
+		<header className="brandbar-container">
+			<div className="brandbar">
+				<Logo />
+				<div>
+					<h1>
+						Poker<em style={{ fontStyle: "italic", color: "#2F6B52" }}>Wise</em>
+					</h1>
+					<span>{tagline}</span>
+				</div>
 			</div>
-		</div>
+
+			<div className="brandbar-actions">
+				{dbHealth ? (
+					<span
+						className={`db-badge ${dbHealth.usingRedis ? "db-redis" : "db-memory"}`}
+						title={dbHealth.message}
+					>
+						<span className="dot" />
+						{dbHealth.usingRedis ? "Redis DB" : "In-Memory"}
+					</span>
+				) : null}
+
+				{user ? (
+					<button
+						type="button"
+						className="user-pill"
+						onClick={onOpenAuth}
+						title="Click to view profile or switch user"
+					>
+						<span
+							className="user-avatar"
+							style={{ backgroundColor: user.avatarColor || "var(--felt)" }}
+						>
+							{user.name.slice(0, 1).toUpperCase()}
+						</span>
+						<span className="user-name">{user.name}</span>
+					</button>
+				) : onOpenAuth ? (
+					<button type="button" className="ghost tiny" onClick={onOpenAuth}>
+						Log in
+					</button>
+				) : null}
+			</div>
+		</header>
 	)
 }

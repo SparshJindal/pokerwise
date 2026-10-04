@@ -466,3 +466,202 @@ a {
 		animation: none !important;
 	}
 }
+
+/* ---------- brandbar container & header actions ---------- */
+.brandbar-container {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 4px 0 16px;
+	flex-wrap: wrap;
+}
+
+.brandbar-container .brandbar {
+	padding: 0;
+}
+
+.brandbar-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.db-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 11px;
+	font-weight: 600;
+	padding: 3px 8px;
+	border-radius: 999px;
+	border: 1px solid var(--line);
+	background: var(--card);
+}
+
+.db-badge .dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+}
+
+.db-redis {
+	color: #1e5a3c;
+	background: #eaf5ef;
+	border-color: #badcc8;
+}
+
+.db-redis .dot {
+	background: #2f6b52;
+}
+
+.db-memory {
+	color: #8c6114;
+	background: #fdf6e7;
+	border-color: #fae4b5;
+}
+
+.db-memory .dot {
+	background: #d7a13b;
+}
+
+.user-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	background: var(--card);
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	padding: 3px 10px 3px 4px;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--ink);
+	cursor: pointer;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.user-pill:hover {
+	border-color: var(--felt);
+}
+
+.user-avatar {
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #ffffff;
+	font-size: 11px;
+	font-weight: bold;
+}
+
+.user-name {
+	max-width: 100px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ---------- modal ---------- */
+.modal-backdrop {
+	position: fixed;
+	inset: 0;
+	background: rgba(43, 42, 40, 0.55);
+	backdrop-filter: blur(4px);
+	-webkit-backdrop-filter: blur(4px);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	z-index: 1000;
+}
+
+.modal-content {
+	width: 100%;
+	max-width: 400px;
+	margin-bottom: 0;
+	animation: popIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes popIn {
+	from {
+		opacity: 0;
+		transform: scale(0.96) translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1) translateY(0);
+	}
+}
+
+/* ---------- quick-add chips & friend badges ---------- */
+.chips-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	margin-top: 6px;
+}
+
+.chip-btn {
+	background: var(--card);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	padding: 6px 10px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--ink);
+	cursor: pointer;
+	min-height: 36px;
+	min-width: 52px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	transition: all 0.1s ease;
+}
+
+.chip-btn:hover {
+	border-color: var(--felt);
+	background: var(--felt-soft);
+	color: var(--felt);
+}
+
+.chip-btn:active {
+	transform: scale(0.97);
+}
+
+.friend-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px 10px;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	background: var(--cream);
+	margin-bottom: 6px;
+	font-size: 14px;
+}
+
+.friend-tag {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-weight: 600;
+}
+
+.add-friend-btn {
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: var(--felt);
+	font-size: 13px;
+	font-weight: 600;
+	padding: 4px 6px;
+	border-radius: 6px;
+}
+
+.add-friend-btn:hover {
+	background: var(--felt-soft);
+}
+

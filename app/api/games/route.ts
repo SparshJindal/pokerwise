@@ -16,9 +16,14 @@ function randomCode() {
 
 export async function POST(req: Request) {
 	let name = "Home game"
+	let initialPlayers: { name: string; userId?: string; buyIn?: number }[] = []
 	try {
-		const body = (await req.json()) as { name?: string }
+		const body = (await req.json()) as {
+			name?: string
+			initialPlayers?: { name: string; userId?: string; buyIn?: number }[]
+		}
 		if (body.name && body.name.trim()) name = body.name.trim().slice(0, 40)
+		if (Array.isArray(body.initialPlayers)) initialPlayers = body.initialPlayers
 	} catch {}
 
 	let code = randomCode()
@@ -28,12 +33,33 @@ export async function POST(req: Request) {
 	}
 
 	const now = new Date()
+	const sessionEntries: Game["sessions"][0]["entries"] = []
+	const players: Game["players"] = []
+
+	for (const p of initialPlayers) {
+		const cleanName = (p.name || "").trim().slice(0, 24)
+		if (!cleanName) continue
+		const pId = Math.random().toString(36).slice(2, 9)
+		players.push({
+			id: pId,
+			name: cleanName,
+			joinedAt: now.toISOString(),
+			userId: p.userId,
+		})
+		const bAmt = Math.round(Number(p.buyIn || 0))
+		sessionEntries.push({
+			playerId: pId,
+			buyIns: bAmt > 0 ? [{ id: Math.random().toString(36).slice(2, 9), amount: bAmt, at: now.toISOString() }] : [],
+			cashOut: null,
+		})
+	}
+
 	const game: Game = {
 		code,
 		name,
 		createdAt: now.toISOString(),
 		updatedAt: now.toISOString(),
-		players: [],
+		players,
 		sessions: [
 			{
 				id: "s1",
@@ -43,7 +69,7 @@ export async function POST(req: Request) {
 				}),
 				date: now.toISOString(),
 				status: "live",
-				entries: [],
+				entries: sessionEntries,
 			},
 		],
 		payments: [],
