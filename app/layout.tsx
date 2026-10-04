@@ -6,7 +6,15 @@ export const metadata: Metadata = {
 	description:
 		"Track poker buy-ins and cash-outs in rupees, then settle up the whole month with the fewest transfers.",
 	manifest: "/manifest.webmanifest",
-	icons: { icon: "/icon.svg", apple: "/icon.svg" },
+	icons: {
+		icon: "/icon.svg",
+		apple: "/apple-touch-icon.png",
+	},
+	appleWebApp: {
+		capable: true,
+		statusBarStyle: "default",
+		title: "PokerWise",
+	},
 }
 
 export const viewport: Viewport = {
