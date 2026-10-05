@@ -2,21 +2,30 @@
 
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useState } from "react"
-import { BrandBar } from "@/components/Logo"
+import { BrandBar, Logo } from "@/components/Logo"
 import { AuthModal } from "@/components/AuthModal"
+import { SignUpScreen } from "@/components/SignUpScreen"
 import type { UserProfile } from "@/lib/types"
 
 type Recent = { code: string; name: string }
 
+const BUYIN_PRESETS = [200, 500, 1000, 2000]
+
 export default function Home() {
 	const router = useRouter()
+	const [loadingAuth, setLoadingAuth] = useState(true)
 	const [user, setUser] = useState<UserProfile | null>(null)
 	const [showAuthModal, setShowAuthModal] = useState(false)
 	const [friends, setFriends] = useState<UserProfile[]>([])
 	const [selectedFriends, setSelectedFriends] = useState<string[]>([])
 	const [newFriendName, setNewFriendName] = useState("")
 
+	const [activeAction, setActiveAction] = useState<"host" | "join" | null>("host")
 	const [tableName, setTableName] = useState("")
+	const [buyIn, setBuyIn] = useState<number>(500)
+	const [customBuyIn, setCustomBuyIn] = useState<string>("")
+	const [isCustomBuyIn, setIsCustomBuyIn] = useState(false)
+
 	const [joinCode, setJoinCode] = useState("")
 	const [busy, setBusy] = useState<"create" | "join" | "friend" | null>(null)
 	const [error, setError] = useState("")
@@ -33,8 +42,14 @@ export default function Home() {
 				if (Array.isArray(fData.friends)) {
 					setFriends(fData.friends)
 				}
+			} else {
+				setUser(null)
 			}
-		} catch {}
+		} catch {
+			setUser(null)
+		} finally {
+			setLoadingAuth(false)
+		}
 	}, [])
 
 	useEffect(() => {
@@ -45,9 +60,19 @@ export default function Home() {
 		} catch {}
 	}, [loadUserAndFriends])
 
+	async function handleSignOut() {
+		try {
+			await fetch("/api/auth", { method: "DELETE" })
+			setUser(null)
+			setFriends([])
+			setSelectedFriends([])
+		} catch {}
+	}
+
 	async function handleAddFriend(e: React.FormEvent) {
 		e.preventDefault()
-		if (!newFriendName.trim()) return
+		const name = newFriendName.trim()
+		if (!name) return
 		if (!user) {
 			setShowAuthModal(true)
 			return
@@ -58,7 +83,7 @@ export default function Home() {
 			const res = await fetch("/api/friends", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ friendName: newFriendName.trim() }),
+				body: JSON.stringify({ friendName: name }),
 			})
 			const data = await res.json()
 			if (!res.ok) throw new Error(data.error ?? "Could not add friend")
@@ -89,46 +114,63 @@ export default function Home() {
 		)
 	}
 
+	function handleBuyInPreset(amt: number) {
+		setIsCustomBuyIn(false)
+		setBuyIn(amt)
+	}
+
+	function handleCustomBuyInChange(val: string) {
+		setCustomBuyIn(val)
+		const parsed = parseInt(val.replace(/\D/g, ""), 10)
+		if (!isNaN(parsed) && parsed > 0) {
+			setBuyIn(parsed)
+		}
+	}
+
 	async function createTable(e: React.FormEvent) {
 		e.preventDefault()
 		setError("")
 		setBusy("create")
 		try {
+			const effectiveBuyIn = isCustomBuyIn
+				? parseInt(customBuyIn, 10) || 500
+				: buyIn
+
 			const initialPlayers: { name: string; userId?: string; buyIn: number }[] = []
 
-			// If user is logged in, seat them automatically
 			if (user) {
 				initialPlayers.push({
 					name: user.name,
 					userId: user.id,
-					buyIn: 500,
+					buyIn: effectiveBuyIn,
 				})
 			}
 
-			// Include selected friends
+			// Include selected friends with same default buyIn
 			for (const fId of selectedFriends) {
 				const friend = friends.find((f) => f.id === fId)
 				if (friend) {
 					initialPlayers.push({
 						name: friend.name,
 						userId: friend.id,
-						buyIn: 500,
+						buyIn: effectiveBuyIn,
 					})
 				}
 			}
 
+			const defaultName = user ? `${user.name}’s Poker Night` : "Home Game"
 			const res = await fetch("/api/games", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
-					name: tableName.trim() || (user ? `${user.name}’s game` : "Home game"),
+					name: tableName.trim() || defaultName,
 					initialPlayers,
 				}),
 			})
 			const data = await res.json()
 			if (!res.ok) throw new Error(data.error ?? "Could not create the table")
 
-			// If creator was seated, link meId in localStorage
+			// Seat creator in localStorage
 			if (user && data.players?.length > 0) {
 				const mePlayer = data.players.find((p: { userId?: string }) => p.userId === user.id)
 				if (mePlayer) {
@@ -154,7 +196,7 @@ export default function Home() {
 		setBusy("join")
 		try {
 			const res = await fetch(`/api/games/${code}`, { cache: "no-store" })
-			if (res.status === 404) throw new Error("No table with that code.")
+			if (res.status === 404) throw new Error("No table found with code " + code)
 			if (!res.ok) throw new Error("Could not reach that table.")
 			router.push(`/game/${code}`)
 		} catch (err) {
@@ -163,6 +205,30 @@ export default function Home() {
 		}
 	}
 
+	// 1. Initial Auth Loading State
+	if (loadingAuth) {
+		return (
+			<div className="auth-loading-screen">
+				<Logo size={52} />
+				<div className="auth-loading-spinner" />
+				<p style={{ fontSize: 15, fontWeight: 500 }}>Dealing your hand…</p>
+			</div>
+		)
+	}
+
+	// 2. Strict Sign-Up Gate: If not logged in, show ONLY the Sign-Up screen
+	if (!user) {
+		return (
+			<SignUpScreen
+				onSuccess={(newUser) => {
+					setUser(newUser)
+					loadUserAndFriends()
+				}}
+			/>
+		)
+	}
+
+	// 3. Authenticated Dashboard: Clear UX with prominent Action Cards
 	return (
 		<main className="wrap">
 			<BrandBar
@@ -173,127 +239,278 @@ export default function Home() {
 			<AuthModal
 				isOpen={showAuthModal}
 				onClose={() => setShowAuthModal(false)}
-				initialName={user?.name || ""}
+				initialName={user.name}
 				onSuccess={(u) => {
 					setUser(u)
 					loadUserAndFriends()
 				}}
+				onSignOut={handleSignOut}
 			/>
 
-			<section className="card hero">
-				<span className="suit" aria-hidden="true">
-					♠
-				</span>
-				<h2 className="serif">Split the night, settle at the end of the month.</h2>
-				<p>
-					Log every buy-in as it happens, punch in final stacks, and PokerWise
-					keeps a running tab in rupees until everyone pays up.
-				</p>
+			{/* Welcome Greeting */}
+			<section className="user-greeting">
+				<h1 className="serif">
+					Hey, {user.name} <span style={{ color: "var(--felt)" }}>♠</span>
+				</h1>
+				<p>Ready to play? Choose to host a new game or join a friend&apos;s table.</p>
 			</section>
 
 			{error ? <div className="err">{error}</div> : null}
 
-			{/* Join a table */}
-			<section className="card">
-				<h2>Join a table</h2>
-				<p className="sub">Got a code from the host? Drop it in.</p>
-				<form onSubmit={joinTable}>
-					<div className="field">
-						<label htmlFor="code">Game code</label>
-						<input
-							id="code"
-							className="code"
-							value={joinCode}
-							onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-							placeholder="4K9QP"
-							maxLength={5}
-							autoCapitalize="characters"
-							autoComplete="off"
-							inputMode="text"
-						/>
-					</div>
-					<button className="primary" type="submit" disabled={busy !== null}>
-						{busy === "join" ? "Taking a seat…" : "Take a seat"}
-					</button>
-				</form>
-
-				<div className="divider">or host it</div>
-
-				{/* Start a new table */}
-				<form onSubmit={createTable}>
-					<div className="field">
-						<label htmlFor="tname">Table name</label>
-						<input
-							id="tname"
-							value={tableName}
-							onChange={(e) => setTableName(e.target.value)}
-							placeholder={user ? `${user.name}’s game` : "Friday night game"}
-							maxLength={40}
-						/>
-					</div>
-
-					{/* Quick seat friends if available */}
-					{friends.length > 0 ? (
-						<div style={{ marginBottom: 14 }}>
-							<label style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-soft)" }}>
-								Quick seat friends (optional)
-							</label>
-							<div className="chips-row">
-								{friends.map((f) => {
-									const isSelected = selectedFriends.includes(f.id)
-									return (
-										<button
-											key={f.id}
-											type="button"
-											className="chip-btn"
-											onClick={() => toggleFriendSelection(f.id)}
-											style={{
-												background: isSelected ? "var(--felt)" : "var(--card)",
-												color: isSelected ? "#ffffff" : "var(--ink)",
-												borderColor: isSelected ? "var(--felt)" : "var(--line)",
-											}}
-										>
-											{isSelected ? "✓ " : "+ "}
-											{f.name}
-										</button>
-									)
-								})}
-							</div>
+			{/* Primary Action Cards: Host vs Join */}
+			<section className="action-grid" aria-label="Game Actions">
+				{/* Host Card */}
+				<button
+					type="button"
+					className={`action-card host ${activeAction === "host" ? "active" : ""}`}
+					onClick={() => setActiveAction(activeAction === "host" ? null : "host")}
+				>
+					<div>
+						<div className="action-card-header">
+							<span className="action-icon">♠</span>
+							<h2 className="action-title" style={{ color: "#ffffff" }}>
+								Host a Table
+							</h2>
 						</div>
-					) : null}
+						<p className="action-desc" style={{ color: "rgba(255, 255, 255, 0.85)" }}>
+							Start a fresh game night, set custom buy-in (₹500), and auto-seat your crew.
+						</p>
+					</div>
+					<div className="action-btn-pill">
+						{activeAction === "host" ? "▲ Close Setup" : "+ Host Table"}
+					</div>
+				</button>
 
-					<button className="ghost" type="submit" disabled={busy !== null}>
-						{busy === "create" ? "Dealing…" : "Start a new table"}
-					</button>
-				</form>
+				{/* Join Card */}
+				<button
+					type="button"
+					className={`action-card join ${activeAction === "join" ? "active" : ""}`}
+					onClick={() => setActiveAction(activeAction === "join" ? null : "join")}
+				>
+					<div>
+						<div className="action-card-header">
+							<span className="action-icon">🎟</span>
+							<h2 className="action-title">Join with Code</h2>
+						</div>
+						<p className="action-desc">
+							Have a 5-letter code from your host? Enter it here to take your seat immediately.
+						</p>
+					</div>
+					<div className="action-btn-pill">
+						{activeAction === "join" ? "▲ Close Input" : "Enter Code →"}
+					</div>
+				</button>
 			</section>
 
-			{/* Poker Crew (Friends) Management Card */}
-			<section className="card">
-				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-					<h2>Your Poker Crew</h2>
-					{!user ? (
+			{/* Expandable Setup Drawer: Host Form */}
+			{activeAction === "host" ? (
+				<section className="action-drawer">
+					<div className="action-drawer-header">
+						<h3>
+							<span style={{ color: "var(--felt)" }}>♠</span>
+							Host a New Table
+						</h3>
 						<button
 							type="button"
 							className="ghost tiny"
-							onClick={() => setShowAuthModal(true)}
+							onClick={() => setActiveAction(null)}
 						>
-							Set your name
+							✕
 						</button>
-					) : null}
+					</div>
+
+					<form onSubmit={createTable}>
+						<div className="field">
+							<label htmlFor="tname">Table Name</label>
+							<input
+								id="tname"
+								value={tableName}
+								onChange={(e) => setTableName(e.target.value)}
+								placeholder={`${user.name}’s Poker Night`}
+								maxLength={40}
+								autoFocus
+							/>
+						</div>
+
+						<div className="field">
+							<label>Starting Buy-In per Player</label>
+							<div className="preset-group">
+								{BUYIN_PRESETS.map((amt) => (
+									<button
+										key={amt}
+										type="button"
+										className={`preset-btn ${!isCustomBuyIn && buyIn === amt ? "selected" : ""}`}
+										onClick={() => handleBuyInPreset(amt)}
+									>
+										₹{amt.toLocaleString("en-IN")}
+									</button>
+								))}
+								<button
+									type="button"
+									className={`preset-btn ${isCustomBuyIn ? "selected" : ""}`}
+									onClick={() => setIsCustomBuyIn(true)}
+								>
+									Custom
+								</button>
+							</div>
+
+							{isCustomBuyIn ? (
+								<div style={{ marginTop: 8 }}>
+									<input
+										type="number"
+										value={customBuyIn}
+										onChange={(e) => handleCustomBuyInChange(e.target.value)}
+										placeholder="e.g. 750"
+										min={50}
+										step={50}
+										autoFocus
+										style={{ maxWidth: 160 }}
+									/>
+									<span style={{ fontSize: 12, color: "var(--ink-soft)", marginLeft: 8 }}>
+										₹ per buy-in
+									</span>
+								</div>
+							) : null}
+						</div>
+
+						{/* Quick Seat Friends */}
+						{friends.length > 0 ? (
+							<div style={{ marginBottom: 18 }}>
+								<label style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-soft)", display: "block", marginBottom: 6 }}>
+									Quick-Seat Friends from Crew <span style={{ fontWeight: 400 }}>(Optional)</span>
+								</label>
+								<div className="chips-row">
+									{friends.map((f) => {
+										const isSelected = selectedFriends.includes(f.id)
+										return (
+											<button
+												key={f.id}
+												type="button"
+												className="chip-btn"
+												onClick={() => toggleFriendSelection(f.id)}
+												style={{
+													background: isSelected ? "var(--felt)" : "var(--card)",
+													color: isSelected ? "#ffffff" : "var(--ink)",
+													borderColor: isSelected ? "var(--felt)" : "var(--line)",
+												}}
+											>
+												{isSelected ? "✓ " : "+ "}
+												{f.name}
+											</button>
+										)
+									})}
+								</div>
+								<span style={{ fontSize: 12, color: "var(--ink-soft)", display: "block", marginTop: 4 }}>
+									Selected friends will be seated with 1 buy-in right when the table opens.
+								</span>
+							</div>
+						) : null}
+
+						<button
+							className="primary"
+							type="submit"
+							disabled={busy !== null}
+							style={{ width: "100%", height: 48, fontSize: 16, fontWeight: 700 }}
+						>
+							{busy === "create" ? "Dealing Cards…" : "Deal the Table ♠"}
+						</button>
+					</form>
+				</section>
+			) : null}
+
+			{/* Expandable Setup Drawer: Join Form */}
+			{activeAction === "join" ? (
+				<section className="action-drawer">
+					<div className="action-drawer-header">
+						<h3>
+							<span>🎟</span>
+							Enter Table Code
+						</h3>
+						<button
+							type="button"
+							className="ghost tiny"
+							onClick={() => setActiveAction(null)}
+						>
+							✕
+						</button>
+					</div>
+
+					<form onSubmit={joinTable}>
+						<div className="field">
+							<label htmlFor="join-code">5-Character Game Code</label>
+							<input
+								id="join-code"
+								className="code"
+								value={joinCode}
+								onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+								placeholder="4K9QP"
+								maxLength={5}
+								autoCapitalize="characters"
+								autoComplete="off"
+								inputMode="text"
+								autoFocus
+								style={{ fontSize: 24, textAlign: "center", letterSpacing: "0.2em", height: 54 }}
+							/>
+						</div>
+						<button
+							className="primary"
+							type="submit"
+							disabled={busy !== null || joinCode.trim().length < 4}
+							style={{ width: "100%", height: 48, fontSize: 16, fontWeight: 700 }}
+						>
+							{busy === "join" ? "Taking Seat…" : "Take My Seat →"}
+						</button>
+					</form>
+				</section>
+			) : null}
+
+			{/* Recent Tables */}
+			{recent.length > 0 ? (
+				<section className="card" style={{ marginBottom: 18 }}>
+					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+						<h2 style={{ fontSize: 18, margin: 0 }}>Your Tables</h2>
+						<span style={{ fontSize: 12, color: "var(--ink-soft)" }}>{recent.length} recent</span>
+					</div>
+					<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+						{recent.map((r) => (
+							<a
+								key={r.code}
+								href={`/game/${r.code}`}
+								className="table-item"
+							>
+								<div>
+									<div style={{ fontWeight: 600, fontSize: 15 }}>{r.name}</div>
+									<div style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 2 }}>Tap to rejoin table</div>
+								</div>
+								<span className="table-code-tag">{r.code}</span>
+							</a>
+						))}
+					</div>
+				</section>
+			) : null}
+
+			{/* Poker Crew Section */}
+			<section className="card" style={{ marginBottom: 18 }}>
+				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+					<h2 style={{ fontSize: 18, margin: 0 }}>
+						Your Poker Crew
+						{friends.length > 0 ? (
+							<span style={{ fontSize: 13, fontWeight: "normal", color: "var(--ink-soft)", marginLeft: 6 }}>
+								({friends.length})
+							</span>
+						) : null}
+					</h2>
 				</div>
-				<p className="sub">
-					Friends you play with regularly. Add them once and quick-seat them at any table.
+				<p className="sub" style={{ marginBottom: 14 }}>
+					Save friends you play with regularly. You can seat them at any table in 1 tap without asking for their codes.
 				</p>
 
 				{friends.length === 0 ? (
-					<div style={{ fontSize: 14, color: "var(--ink-soft)", marginBottom: 12 }}>
-						{user
-							? "No friends added yet. Type a friend's name below to save them to your crew."
-							: "Log in above to save and manage your poker crew across tables."}
+					<div style={{ fontSize: 14, color: "var(--ink-soft)", marginBottom: 16, padding: "12px 14px", background: "var(--bg)", borderRadius: 10 }}>
+						No crew members added yet. Type a friend’s name below to save them.
 					</div>
 				) : (
-					<div style={{ marginBottom: 12 }}>
+					<div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
 						{friends.map((f) => (
 							<div key={f.id} className="friend-item">
 								<span className="friend-tag">
@@ -303,7 +520,7 @@ export default function Home() {
 									>
 										{f.name.slice(0, 1).toUpperCase()}
 									</span>
-									{f.name}
+									<span style={{ fontWeight: 600 }}>{f.name}</span>
 								</span>
 								<button
 									type="button"
@@ -312,7 +529,7 @@ export default function Home() {
 									style={{ color: "var(--rose)", fontSize: 12 }}
 									title="Remove from crew"
 								>
-									Remove
+									✕ Remove
 								</button>
 							</div>
 						))}
@@ -323,7 +540,7 @@ export default function Home() {
 					<input
 						value={newFriendName}
 						onChange={(e) => setNewFriendName(e.target.value)}
-						placeholder="Friend's name (e.g. Rahul)"
+						placeholder="Add friend's name (e.g. Rahul)"
 						maxLength={24}
 						style={{ flex: 1 }}
 					/>
@@ -333,27 +550,36 @@ export default function Home() {
 						disabled={busy === "friend" || !newFriendName.trim()}
 						style={{ whiteSpace: "nowrap" }}
 					>
-						+ Add to crew
+						+ Add to Crew
 					</button>
 				</form>
 			</section>
 
-			{recent.length > 0 ? (
-				<section className="card">
-					<h2>Your tables</h2>
-					<p className="sub">Back to a game you were already in.</p>
-					<ul className="history">
-						{recent.map((r) => (
-							<li key={r.code}>
-								<a href={`/game/${r.code}`}>{r.name}</a>
-								<span className="num">{r.code}</span>
-							</li>
-						))}
-					</ul>
-				</section>
-			) : null}
+			{/* How PokerWise Works Guide */}
+			<section className="how-it-works-box">
+				<h3>How PokerWise Works</h3>
+				<div className="steps-grid">
+					<div className="step-card">
+						<span className="step-number">STEP 1</span>
+						<h4>Seat & Buy In</h4>
+						<p>Host deals the table with a starting buy-in. Share the 5-letter code or seat friends with 1 tap.</p>
+					</div>
+					<div className="step-card">
+						<span className="step-number">STEP 2</span>
+						<h4>Live Re-Buys</h4>
+						<p>Whenever anyone busts or reloads, tap +₹500. The live pot updates instantly across all phones.</p>
+					</div>
+					<div className="step-card">
+						<span className="step-number">STEP 3</span>
+						<h4>Settle The Tab</h4>
+						<p>Count chips at the end of the night. PokerWise computes the fewest UPI payments to settle up.</p>
+					</div>
+				</div>
+			</section>
 
-			<footer className="foot">Play nice. Pay up. ♥ ♦ ♣ ♠</footer>
+			<footer className="foot" style={{ marginTop: 28 }}>
+				Play nice. Pay up. ♥ ♦ ♣ ♠
+			</footer>
 		</main>
 	)
 }

@@ -7,11 +7,13 @@ export function AuthModal({
 	isOpen,
 	onClose,
 	onSuccess,
+	onSignOut,
 	initialName = "",
 }: {
 	isOpen: boolean
 	onClose?: () => void
 	onSuccess: (user: UserProfile) => void
+	onSignOut?: () => void
 	initialName?: string
 }) {
 	const [name, setName] = useState(initialName)
@@ -101,6 +103,22 @@ export function AuthModal({
 							{busy ? "Saving…" : "Save & Continue"}
 						</button>
 					</div>
+
+					{onSignOut ? (
+						<div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--line)", textAlign: "center" }}>
+							<button
+								type="button"
+								className="ghost tiny"
+								onClick={() => {
+									onSignOut()
+									if (onClose) onClose()
+								}}
+								style={{ color: "var(--rose)", fontWeight: 600 }}
+							>
+								Switch Player / Log out
+							</button>
+						</div>
+					) : null}
 				</form>
 			</div>
 		</div>
