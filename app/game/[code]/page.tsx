@@ -29,7 +29,7 @@ export default function GamePage({
 
 	// join form
 	const [joinName, setJoinName] = useState("")
-	const [joinBuyIn, setJoinBuyIn] = useState("500")
+	const [joinBuyIn, setJoinBuyIn] = useState("")
 
 	// per-player inputs
 	const [topUp, setTopUp] = useState<Record<string, string>>({})
@@ -151,11 +151,13 @@ export default function GamePage({
 	}, [friends, game])
 
 	async function quickSeatFriend(f: UserProfile) {
+		const defaultTableBuyIn =
+			game?.sessions[0]?.entries?.find((e) => e.buyIns.length > 0)?.buyIns[0]?.amount ?? 0
 		await act({
 			action: "quickSeatPlayer",
 			name: f.name,
 			userId: f.id,
-			buyIn: 500,
+			buyIn: defaultTableBuyIn,
 		})
 	}
 
@@ -301,13 +303,15 @@ export default function GamePage({
 									/>
 								</div>
 								<div className="field">
-									<label htmlFor="bi">Buy-in (₹)</label>
+									<label htmlFor="bi">
+										Buy-in (₹) <span style={{ fontWeight: "normal", color: "var(--ink-soft)" }}>(optional, can be 0)</span>
+									</label>
 									<input
 										id="bi"
 										value={joinBuyIn}
 										onChange={(e) => setJoinBuyIn(e.target.value)}
 										inputMode="numeric"
-										placeholder="500"
+										placeholder="0"
 									/>
 								</div>
 								<button className="primary" type="submit">
@@ -350,16 +354,20 @@ export default function GamePage({
 									Quick-seat your poker crew:
 								</label>
 								<div className="chips-row">
-									{unseatedFriends.map((f) => (
-										<button
-											key={f.id}
-											type="button"
-											className="chip-btn"
-											onClick={() => quickSeatFriend(f)}
-										>
-											+ Seat {f.name} (₹500)
-										</button>
-									))}
+									{unseatedFriends.map((f) => {
+										const defaultTableBuyIn =
+											game?.sessions[0]?.entries?.find((e) => e.buyIns.length > 0)?.buyIns[0]?.amount ?? 0
+										return (
+											<button
+												key={f.id}
+												type="button"
+												className="chip-btn"
+												onClick={() => quickSeatFriend(f)}
+											>
+												+ Seat {f.name} {defaultTableBuyIn > 0 ? `(₹${defaultTableBuyIn})` : `(₹0)`}
+											</button>
+										)
+									})}
 								</div>
 							</div>
 						) : null}
@@ -461,7 +469,7 @@ export default function GamePage({
 
 									{/* Quick-add chips */}
 									<div className="chips-row" style={{ marginTop: 2, marginBottom: 10 }}>
-										{[500, 1000, 2000, 5000].map((amt) => (
+										{[100, 200, 500, 1000, 2000].map((amt) => (
 											<button
 												key={amt}
 												type="button"

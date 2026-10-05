@@ -86,7 +86,7 @@ export async function POST(req: Request, ctx: Ctx) {
 
 		case "quickSeatPlayer": {
 			const name = String(body.name ?? "").trim().slice(0, 24)
-			const amount = money(body.buyIn ?? 500)
+			const amount = body.buyIn !== undefined ? money(body.buyIn) : 0
 			const userId = body.userId ? String(body.userId) : undefined
 			if (!name) return bad("Player name is required.")
 			if (game.players.some((p) => p.name.toLowerCase() === name.toLowerCase())) {

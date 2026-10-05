@@ -9,7 +9,7 @@ import type { UserProfile } from "@/lib/types"
 
 type Recent = { code: string; name: string }
 
-const BUYIN_PRESETS = [200, 500, 1000, 2000]
+const BUYIN_PRESETS = [0, 100, 200, 500, 1000]
 
 export default function Home() {
 	const router = useRouter()
@@ -116,26 +116,32 @@ export default function Home() {
 
 	function handleBuyInPreset(amt: number) {
 		setIsCustomBuyIn(false)
+		setCustomBuyIn("")
 		setBuyIn(amt)
 	}
 
 	function handleCustomBuyInChange(val: string) {
 		setCustomBuyIn(val)
-		const parsed = parseInt(val.replace(/\D/g, ""), 10)
-		if (!isNaN(parsed) && parsed > 0) {
-			setBuyIn(parsed)
+		const cleaned = val.replace(/\D/g, "")
+		if (cleaned === "") {
+			setBuyIn(0)
+		} else {
+			const parsed = parseInt(cleaned, 10)
+			if (!isNaN(parsed) && parsed >= 0) {
+				setBuyIn(parsed)
+			}
 		}
 	}
+
+	const effectiveBuyIn = isCustomBuyIn
+		? (customBuyIn.trim() === "" ? 0 : Math.max(0, parseInt(customBuyIn, 10) || 0))
+		: Math.max(0, buyIn)
 
 	async function createTable(e: React.FormEvent) {
 		e.preventDefault()
 		setError("")
 		setBusy("create")
 		try {
-			const effectiveBuyIn = isCustomBuyIn
-				? parseInt(customBuyIn, 10) || 500
-				: buyIn
-
 			const initialPlayers: { name: string; userId?: string; buyIn: number }[] = []
 
 			if (user) {
@@ -273,7 +279,7 @@ export default function Home() {
 							</h2>
 						</div>
 						<p className="action-desc" style={{ color: "rgba(255, 255, 255, 0.85)" }}>
-							Start a fresh game night, set custom buy-in (₹500), and auto-seat your crew.
+							Start a fresh game night, set any buy-in (or ₹0), and auto-seat your crew.
 						</p>
 					</div>
 					<div className="action-btn-pill">
@@ -342,7 +348,7 @@ export default function Home() {
 										className={`preset-btn ${!isCustomBuyIn && buyIn === amt ? "selected" : ""}`}
 										onClick={() => handleBuyInPreset(amt)}
 									>
-										₹{amt.toLocaleString("en-IN")}
+										{amt === 0 ? "₹0 (Free / Open)" : `₹${amt.toLocaleString("en-IN")}`}
 									</button>
 								))}
 								<button
@@ -360,14 +366,13 @@ export default function Home() {
 										type="number"
 										value={customBuyIn}
 										onChange={(e) => handleCustomBuyInChange(e.target.value)}
-										placeholder="e.g. 750"
-										min={50}
-										step={50}
+										placeholder="e.g. 0, 50, 300"
+										min={0}
 										autoFocus
 										style={{ maxWidth: 160 }}
 									/>
 									<span style={{ fontSize: 12, color: "var(--ink-soft)", marginLeft: 8 }}>
-										₹ per buy-in
+										₹ per player {effectiveBuyIn === 0 ? "(Free / ₹0)" : ""}
 									</span>
 								</div>
 							) : null}
@@ -401,7 +406,9 @@ export default function Home() {
 									})}
 								</div>
 								<span style={{ fontSize: 12, color: "var(--ink-soft)", display: "block", marginTop: 4 }}>
-									Selected friends will be seated with 1 buy-in right when the table opens.
+									{effectiveBuyIn > 0
+										? `Selected friends will be seated with ₹${effectiveBuyIn.toLocaleString("en-IN")} initial buy-in.`
+										: "Selected friends will be seated with ₹0 buy-in (free / open tab)."}
 								</span>
 							</div>
 						) : null}
@@ -567,7 +574,7 @@ export default function Home() {
 					<div className="step-card">
 						<span className="step-number">STEP 2</span>
 						<h4>Live Re-Buys</h4>
-						<p>Whenever anyone busts or reloads, tap +₹500. The live pot updates instantly across all phones.</p>
+						<p>Whenever anyone busts or reloads, tap a quick chip or enter custom amount. The pot updates instantly.</p>
 					</div>
 					<div className="step-card">
 						<span className="step-number">STEP 3</span>
