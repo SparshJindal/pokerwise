@@ -2,6 +2,7 @@ export type BuyIn = {
 	id: string
 	amount: number
 	at: string
+	note?: string
 }
 
 export type UserProfile = {

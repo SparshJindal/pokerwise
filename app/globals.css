@@ -1046,5 +1046,113 @@ a {
 	}
 }
 
+/* ---------- chip transfer & dynamic buy-in styles ---------- */
+.transfer-trigger-banner {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px 14px;
+	background: var(--cream);
+	border: 1px dashed var(--felt);
+	border-radius: var(--radius);
+	margin-bottom: 16px;
+	gap: 10px;
+}
+
+.transfer-trigger-banner p {
+	font-size: 13px;
+	color: var(--ink);
+	margin: 0;
+	line-height: 1.35;
+}
+
+.transfer-preview-box {
+	background: var(--bg);
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	padding: 12px 14px;
+	margin: 14px 0;
+	font-size: 13px;
+}
+
+.transfer-preview-row {
+	display: flex;
+	justify-content: space-between;
+	margin-bottom: 6px;
+}
+
+.transfer-preview-row:last-child {
+	margin-bottom: 0;
+	padding-top: 6px;
+	border-top: 1px dashed var(--line);
+}
+
+.buyin-mode-toggle {
+	display: inline-flex;
+	background: var(--bg);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	padding: 2px;
+	margin-bottom: 8px;
+}
+
+.buyin-mode-btn {
+	padding: 4px 10px;
+	font-size: 12px;
+	font-weight: 600;
+	border: none;
+	background: none;
+	border-radius: 6px;
+	cursor: pointer;
+	color: var(--ink-soft);
+	transition: all 0.12s ease;
+}
+
+.buyin-mode-btn.active.add {
+	background: var(--felt);
+	color: #ffffff;
+}
+
+.buyin-mode-btn.active.reduce {
+	background: #c85f6a;
+	color: #ffffff;
+}
+
+.buyin-history-box {
+	background: var(--bg);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	padding: 8px 12px;
+	margin-top: 8px;
+	margin-bottom: 8px;
+	animation: popIn 0.15s ease;
+}
+
+.buyin-history-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	font-size: 12px;
+	padding: 4px 0;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.buyin-history-row:last-child {
+	border-bottom: none;
+}
+
+.negative-buyin-tag {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	background: rgba(47, 107, 82, 0.12);
+	color: var(--felt);
+	font-size: 11px;
+	font-weight: 700;
+	padding: 2px 7px;
+	border-radius: 999px;
+	margin-left: 6px;
+}
+
 
 

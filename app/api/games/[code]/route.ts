@@ -33,6 +33,12 @@ function entryFor(game: Game, playerId: string) {
 	return entry
 }
 
+function signedMoney(value: unknown) {
+	const n = Math.round(Number(value))
+	if (!Number.isFinite(n) || Math.abs(n) > 10_000_000) return null
+	return n
+}
+
 function money(value: unknown) {
 	const n = Math.round(Number(value))
 	if (!Number.isFinite(n) || n < 0 || n > 10_000_000) return null
@@ -104,12 +110,47 @@ export async function POST(req: Request, ctx: Ctx) {
 
 		case "addBuyIn": {
 			const playerId = String(body.playerId ?? "")
-			const amount = money(body.amount)
+			const amount = signedMoney(body.amount)
+			const note = body.note ? String(body.note).slice(0, 80) : undefined
 			if (!game.players.some((p) => p.id === playerId))
 				return bad("That player is not at the table.")
-			if (amount === null || amount <= 0) return bad("Enter a valid amount.")
+			if (amount === null || amount === 0) return bad("Enter a valid non-zero amount.")
 			const entry = entryFor(game, playerId)
-			entry.buyIns.push({ id: id(), amount, at: new Date().toISOString() })
+			entry.buyIns.push({ id: id(), amount, at: new Date().toISOString(), note })
+			break
+		}
+
+		case "transferChips": {
+			const fromPlayerId = String(body.fromPlayerId ?? "")
+			const toPlayerId = String(body.toPlayerId ?? "")
+			const amount = money(body.amount)
+			if (!amount || amount <= 0) return bad("Enter a valid transfer amount.")
+			if (fromPlayerId === toPlayerId) return bad("Choose two different players.")
+
+			const fromPlayer = game.players.find((p) => p.id === fromPlayerId)
+			const toPlayer = game.players.find((p) => p.id === toPlayerId)
+			if (!fromPlayer || !toPlayer) return bad("Both players must be at the table.")
+
+			const fromEntry = entryFor(game, fromPlayerId)
+			const toEntry = entryFor(game, toPlayerId)
+			const now = new Date().toISOString()
+
+			// Giver gives chips from their stack: their buy-in decreases (can go negative!)
+			fromEntry.buyIns.push({
+				id: id(),
+				amount: -amount,
+				at: now,
+				note: `Gave chips to ${toPlayer.name}`,
+			})
+
+			// Receiver gets chips into their stack: their buy-in increases
+			toEntry.buyIns.push({
+				id: id(),
+				amount: amount,
+				at: now,
+				note: `Got chips from ${fromPlayer.name}`,
+			})
+
 			break
 		}
 

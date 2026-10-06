@@ -8,6 +8,9 @@ export const rupees = (n: number) =>
 export const signedRupees = (n: number) =>
 	(n < 0 ? "-" : "+") + rupees(n)
 
+export const displayRupees = (n: number) =>
+	(n < 0 ? "-" : "") + rupees(n)
+
 export function sessionTotals(game: Game, sessionId: string) {
 	const session = game.sessions.find((s) => s.id === sessionId)
 	if (!session) return { pot: 0, counted: 0, drift: 0 }

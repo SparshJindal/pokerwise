@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { BrandBar } from "@/components/Logo"
 import { AuthModal } from "@/components/AuthModal"
-import { balances, hasLiveUncounted, rupees, sessionTotals, settlements, tableNets } from "@/lib/settle"
+import { balances, displayRupees, hasLiveUncounted, rupees, sessionTotals, settlements, tableNets } from "@/lib/settle"
 import type { Game, UserProfile } from "@/lib/types"
 
 type Tab = "night" | "tab"
@@ -34,6 +34,14 @@ export default function GamePage({
 	// per-player inputs
 	const [topUp, setTopUp] = useState<Record<string, string>>({})
 	const [stack, setStack] = useState<Record<string, string>>({})
+	const [buyInMode, setBuyInMode] = useState<Record<string, "add" | "reduce">>({})
+	const [expandedHistory, setExpandedHistory] = useState<Record<string, boolean>>({})
+
+	// chip transfer form
+	const [showTransferModal, setShowTransferModal] = useState(false)
+	const [transferFrom, setTransferFrom] = useState("")
+	const [transferTo, setTransferTo] = useState("")
+	const [transferAmount, setTransferAmount] = useState("500")
 
 	// payment form
 	const [payFrom, setPayFrom] = useState("")
@@ -175,6 +183,49 @@ export default function GamePage({
 		} catch {}
 	}
 
+	function openTransferModal(fromId?: string, toId?: string) {
+		setError("")
+		const players = game?.players ?? []
+		if (players.length < 2) {
+			setError("Need at least 2 players at the table to transfer chips.")
+			return
+		}
+		if (fromId) {
+			setTransferFrom(fromId)
+			const other = players.find((p) => p.id !== fromId)
+			setTransferTo(toId || other?.id || "")
+		} else {
+			setTransferFrom(players[0].id)
+			setTransferTo(toId || (players[1] ? players[1].id : ""))
+		}
+		setTransferAmount("500")
+		setShowTransferModal(true)
+	}
+
+	async function handleTransferChips(e: React.FormEvent) {
+		e.preventDefault()
+		setError("")
+		const amt = Number(transferAmount)
+		if (!amt || amt <= 0) {
+			setError("Enter a valid chip transfer amount.")
+			return
+		}
+		if (!transferFrom || !transferTo || transferFrom === transferTo) {
+			setError("Choose two different players to transfer chips.")
+			return
+		}
+		const res = await act({
+			action: "transferChips",
+			fromPlayerId: transferFrom,
+			toPlayerId: transferTo,
+			amount: amt,
+		})
+		if (res) {
+			setShowTransferModal(false)
+			setTransferAmount("500")
+		}
+	}
+
 	if (loading) {
 		return (
 			<main className="wrap">
@@ -224,6 +275,159 @@ export default function GamePage({
 					setJoinName(u.name)
 				}}
 			/>
+
+			{showTransferModal ? (
+				<div className="modal-backdrop">
+					<div className="card modal-content" role="dialog" aria-modal="true" style={{ maxWidth: 440 }}>
+						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+							<h3 style={{ margin: 0, fontSize: 18, fontFamily: "Georgia, serif" }}>
+								⇄ Transfer Chips Between Stacks
+							</h3>
+							<button
+								type="button"
+								className="ghost tiny"
+								onClick={() => setShowTransferModal(false)}
+							>
+								✕
+							</button>
+						</div>
+
+						<p className="sub" style={{ fontSize: 13, marginBottom: 14 }}>
+							Running low on physical chips? When a player with a big stack gives chips to another player, record it here. The giver&apos;s buy-in decreases (can go negative) and the receiver&apos;s buy-in increases. Total table pot stays constant.
+						</p>
+
+						{error ? <div className="err" style={{ marginBottom: 12 }}>{error}</div> : null}
+
+						<form onSubmit={handleTransferChips}>
+							<div className="field">
+								<label htmlFor="tf-from">From (Player giving physical chips from stack)</label>
+								<select
+									id="tf-from"
+									value={transferFrom}
+									onChange={(e) => setTransferFrom(e.target.value)}
+									style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+								>
+									{game?.players.map((p) => {
+										const pEntry = live?.entries.find((e) => e.playerId === p.id)
+										const pSpent = pEntry?.buyIns.reduce((a, b) => a + b.amount, 0) ?? 0
+										return (
+											<option key={p.id} value={p.id}>
+												{p.name} (Current buy-in: {displayRupees(pSpent)})
+											</option>
+										)
+									})}
+								</select>
+							</div>
+
+							<div className="field">
+								<label htmlFor="tf-to">To (Player receiving chips into stack)</label>
+								<select
+									id="tf-to"
+									value={transferTo}
+									onChange={(e) => setTransferTo(e.target.value)}
+									style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--line)" }}
+								>
+									{game?.players
+										.filter((p) => p.id !== transferFrom)
+										.map((p) => {
+											const pEntry = live?.entries.find((e) => e.playerId === p.id)
+											const pSpent = pEntry?.buyIns.reduce((a, b) => a + b.amount, 0) ?? 0
+											return (
+												<option key={p.id} value={p.id}>
+													{p.name} (Current buy-in: {displayRupees(pSpent)})
+												</option>
+											)
+										})}
+								</select>
+							</div>
+
+							<div className="field">
+								<label>Chip Amount (₹)</label>
+								<div className="chips-row" style={{ marginBottom: 8 }}>
+									{[100, 200, 500, 1000].map((amt) => (
+										<button
+											key={amt}
+											type="button"
+											className={`chip-btn ${transferAmount === String(amt) ? "selected" : ""}`}
+											onClick={() => setTransferAmount(String(amt))}
+										>
+											₹{amt.toLocaleString("en-IN")}
+										</button>
+									))}
+								</div>
+								<input
+									type="number"
+									value={transferAmount}
+									onChange={(e) => setTransferAmount(e.target.value)}
+									placeholder="500"
+									min={1}
+									style={{ fontSize: 16 }}
+								/>
+							</div>
+
+							{/* Live preview */}
+							{transferFrom && transferTo && Number(transferAmount) > 0 ? (
+								<div className="transfer-preview-box">
+									<div style={{ fontWeight: 600, marginBottom: 6, color: "var(--felt)" }}>
+										Preview of Ledger Adjustment:
+									</div>
+									{(() => {
+										const amt = Number(transferAmount) || 0
+										const fPlayer = game?.players.find((p) => p.id === transferFrom)
+										const tPlayer = game?.players.find((p) => p.id === transferTo)
+										const fEntry = live?.entries.find((e) => e.playerId === transferFrom)
+										const tEntry = live?.entries.find((e) => e.playerId === transferTo)
+										const fSpent = fEntry?.buyIns.reduce((a, b) => a + b.amount, 0) ?? 0
+										const tSpent = tEntry?.buyIns.reduce((a, b) => a + b.amount, 0) ?? 0
+										const fNew = fSpent - amt
+										const tNew = tSpent + amt
+										return (
+											<>
+												<div className="transfer-preview-row">
+													<span>{fPlayer?.name} Buy-in:</span>
+													<span>
+														{displayRupees(fSpent)} → <b>{displayRupees(fNew)}</b>
+														{fNew < 0 ? " (Negative)" : ""}
+													</span>
+												</div>
+												<div className="transfer-preview-row">
+													<span>{tPlayer?.name} Buy-in:</span>
+													<span>
+														{displayRupees(tSpent)} → <b>{displayRupees(tNew)}</b>
+													</span>
+												</div>
+												<div className="transfer-preview-row">
+													<span>Total Table Pot:</span>
+													<span>Unchanged (Exact same physical chips)</span>
+												</div>
+											</>
+										)
+									})()}
+								</div>
+							) : null}
+
+							<div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+								<button
+									type="button"
+									className="ghost"
+									onClick={() => setShowTransferModal(false)}
+									style={{ flex: 1 }}
+								>
+									Cancel
+								</button>
+								<button
+									type="submit"
+									className="primary"
+									style={{ flex: 2 }}
+									disabled={!transferFrom || !transferTo || !Number(transferAmount)}
+								>
+									Transfer Chips ⇄
+								</button>
+							</div>
+						</form>
+					</div>
+				</div>
+			) : null}
 
 			<section className="card codecard">
 				<div>
@@ -322,7 +526,19 @@ export default function GamePage({
 					) : null}
 
 					<section className="card">
-						<h2>At the table</h2>
+						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+							<h2>At the table</h2>
+							{game.players.length >= 2 ? (
+								<button
+									type="button"
+									className="ghost tiny"
+									onClick={() => openTransferModal()}
+									style={{ color: "var(--felt)", fontWeight: 600 }}
+								>
+									⇄ Transfer Chips
+								</button>
+							) : null}
+						</div>
 						<p className="sub">
 							Pot on the table {rupees(totals.pot)} · counted{" "}
 							{rupees(totals.counted)}
@@ -330,6 +546,28 @@ export default function GamePage({
 								? ` · off by ${rupees(totals.drift)}`
 								: ""}
 						</p>
+
+						{/* Chip shortage / Stack sharing banner */}
+						{game.players.length >= 2 ? (
+							<div className="transfer-trigger-banner">
+								<div>
+									<div style={{ fontWeight: 700, fontSize: 13, color: "var(--felt)" }}>
+										⇄ Running Low on Physical Chips?
+									</div>
+									<p>
+										Players with profit can give chips from their stack. Buy-ins adjust dynamically and can go negative.
+									</p>
+								</div>
+								<button
+									type="button"
+									className="primary tiny"
+									onClick={() => openTransferModal()}
+									style={{ whiteSpace: "nowrap" }}
+								>
+									Transfer Chips ⇄
+								</button>
+							</div>
+						) : null}
 
 						{/* Quick-seat crew members */}
 						{unseatedFriends.length > 0 ? (
@@ -416,10 +654,22 @@ export default function GamePage({
 
 									<div className="meta">
 										<span>
-											Buy-ins <b className="num">{rupees(spent)}</b>{" "}
-											{entry && entry.buyIns.length > 1
-												? `(${entry.buyIns.length}×)`
-												: ""}
+											Buy-ins <b className="num" style={{ color: spent < 0 ? "var(--felt)" : undefined }}>{displayRupees(spent)}</b>{" "}
+											{spent < 0 ? (
+												<span className="negative-buyin-tag">Stack Donor</span>
+											) : null}
+											{entry && entry.buyIns.length > 0 ? (
+												<button
+													type="button"
+													className="ghost tiny"
+													style={{ padding: "0 4px", fontSize: 11, marginLeft: 4, color: "var(--felt)" }}
+													onClick={() =>
+														setExpandedHistory((prev) => ({ ...prev, [p.id]: !prev[p.id] }))
+													}
+												>
+													{expandedHistory[p.id] ? "Hide log ▲" : `(${entry.buyIns.length} items) ▼`}
+												</button>
+											) : null}
 										</span>
 										<span>
 											Final stack{" "}
@@ -435,10 +685,87 @@ export default function GamePage({
 										) : null}
 									</div>
 
+									{/* Collapsible Buy-in & Transfer History Log */}
+									{expandedHistory[p.id] && entry && entry.buyIns.length > 0 ? (
+										<div className="buyin-history-box">
+											<div style={{ fontWeight: 600, fontSize: 12, marginBottom: 4, color: "var(--ink-soft)" }}>
+												Buy-in & Stack Transfer Log:
+											</div>
+											{entry.buyIns.map((bi) => (
+												<div key={bi.id} className="buyin-history-row">
+													<span>
+														{bi.note || (bi.amount < 0 ? "Stack reduction" : "Buy-in")}
+														<span style={{ color: "var(--ink-soft)", fontSize: 11, marginLeft: 6 }}>
+															{new Date(bi.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+														</span>
+													</span>
+													<span className={bi.amount < 0 ? "up num" : "num"} style={{ fontWeight: 700 }}>
+														{bi.amount < 0 ? `−${rupees(bi.amount)}` : `+${rupees(bi.amount)}`}
+													</span>
+												</div>
+											))}
+											<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, paddingTop: 6, borderTop: "1px dashed var(--line)" }}>
+												{game.players.length >= 2 ? (
+													<button
+														type="button"
+														className="ghost tiny"
+														onClick={() => openTransferModal(p.id)}
+														style={{ fontSize: 11, color: "var(--felt)", fontWeight: 600 }}
+													>
+														⇄ Give chips from stack
+													</button>
+												) : <span />}
+												<button
+													type="button"
+													className="ghost tiny"
+													onClick={async () => {
+														await act({ action: "undoBuyIn", playerId: p.id })
+													}}
+													style={{ color: "var(--rose)", fontSize: 11 }}
+												>
+													Undo last
+												</button>
+											</div>
+										</div>
+									) : null}
+
+									{/* Buy-in mode switcher: + Add Buy-in vs − Reduce Buy-in */}
+									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, marginBottom: 6 }}>
+										<div className="buyin-mode-toggle">
+											<button
+												type="button"
+												className={`buyin-mode-btn add ${(buyInMode[p.id] ?? "add") === "add" ? "active" : ""}`}
+												onClick={() => setBuyInMode((prev) => ({ ...prev, [p.id]: "add" }))}
+											>
+												+ Add Buy-in
+											</button>
+											<button
+												type="button"
+												className={`buyin-mode-btn reduce ${buyInMode[p.id] === "reduce" ? "active" : ""}`}
+												onClick={() => setBuyInMode((prev) => ({ ...prev, [p.id]: "reduce" }))}
+											>
+												− Reduce / Return
+											</button>
+										</div>
+
+										{game.players.length >= 2 ? (
+											<button
+												type="button"
+												className="ghost tiny"
+												onClick={() => openTransferModal(p.id)}
+												style={{ fontSize: 11, color: "var(--felt)", fontWeight: 600 }}
+											>
+												⇄ Give from stack
+											</button>
+										) : null}
+									</div>
+
 									<div className="actions">
 										<div className="stack" style={{ flex: 1 }}>
 											<div className="field">
-												<label htmlFor={`t-${p.id}`}>Another buy-in</label>
+												<label htmlFor={`t-${p.id}`}>
+													{(buyInMode[p.id] ?? "add") === "add" ? "Add buy-in amount" : "Deduct / Return amount"}
+												</label>
 												<input
 													id={`t-${p.id}`}
 													value={topUp[p.id] ?? ""}
@@ -450,36 +777,53 @@ export default function GamePage({
 												/>
 											</div>
 											<button
-												className="primary tiny"
+												className={(buyInMode[p.id] ?? "add") === "add" ? "primary tiny" : "ghost tiny"}
 												type="button"
+												style={buyInMode[p.id] === "reduce" ? { color: "var(--rose)", borderColor: "var(--rose)", fontWeight: 700 } : undefined}
 												onClick={async () => {
-													const amount = Number(topUp[p.id] ?? 0)
-													if (!amount) {
-														setError("Type how much they bought in for.")
+													const val = Number(topUp[p.id] ?? 0)
+													if (!val) {
+														setError("Type an amount.")
 														return
 													}
-													await act({ action: "addBuyIn", playerId: p.id, amount })
+													const isReduce = buyInMode[p.id] === "reduce"
+													const amount = isReduce ? -Math.abs(val) : Math.abs(val)
+													await act({
+														action: "addBuyIn",
+														playerId: p.id,
+														amount,
+														note: isReduce ? "Manual buy-in reduction" : "Re-buy",
+													})
 													setTopUp({ ...topUp, [p.id]: "" })
 												}}
 											>
-												+ Add
+												{(buyInMode[p.id] ?? "add") === "add" ? "+ Add" : "− Deduct"}
 											</button>
 										</div>
 									</div>
 
-									{/* Quick-add chips */}
+									{/* Quick chips (positive if Add, negative if Reduce) */}
 									<div className="chips-row" style={{ marginTop: 2, marginBottom: 10 }}>
-										{[100, 200, 500, 1000, 2000].map((amt) => (
+										{(buyInMode[p.id] === "reduce"
+											? [-100, -200, -500, -1000]
+											: [100, 200, 500, 1000, 2000]
+										).map((amt) => (
 											<button
 												key={amt}
 												type="button"
 												className="chip-btn"
+												style={amt < 0 ? { borderColor: "rgba(200, 95, 106, 0.4)", color: "#c85f6a" } : undefined}
 												onClick={async () => {
-													await act({ action: "addBuyIn", playerId: p.id, amount: amt })
+													await act({
+														action: "addBuyIn",
+														playerId: p.id,
+														amount: amt,
+														note: amt < 0 ? "Quick stack reduction" : "Re-buy",
+													})
 												}}
-												title={`Quick add ₹${amt}`}
+												title={amt < 0 ? `Reduce buy-in by ₹${Math.abs(amt)}` : `Quick add ₹${amt}`}
 											>
-												+₹{amt.toLocaleString("en-IN")}
+												{amt < 0 ? `−₹${Math.abs(amt).toLocaleString("en-IN")}` : `+₹${amt.toLocaleString("en-IN")}`}
 											</button>
 										))}
 									</div>
